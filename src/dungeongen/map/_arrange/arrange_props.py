@@ -66,6 +66,21 @@ def arrange_prop(elem: MapElement, prop_type: 'PropType') -> Optional['Prop']:
     elif prop_type == PropType.ALTAR:
         # Create altar with random rotation
         prop = Altar.create(rotation=Rotation.random_cardinal_rotation())
+    elif prop_type == PropType.COFFIN:
+        from dungeongen.map._props.coffin import Coffin, COFFIN_PROP_TYPE
+        prop = Coffin(COFFIN_PROP_TYPE, (0, 0), rotation=Rotation.random_cardinal_rotation())
+    elif prop_type == PropType.STAR:
+        from dungeongen.map._props.star import Star
+        prop = Star((0, 0), rotation=Rotation.random_cardinal_rotation())
+    elif prop_type == PropType.PODIUM:
+        from dungeongen.map._props.podium import Podium
+        prop = Podium((0, 0), rotation=Rotation.random_cardinal_rotation())
+    elif prop_type == PropType.CURTAINS:
+        from dungeongen.map._props.curtains import Curtains
+        prop = Curtains((0, 0), rotation=Rotation.random_cardinal_rotation())
+    elif prop_type == PropType.BARRELS:
+        from dungeongen.map._props.barrels import Barrels
+        prop = Barrels((0, 0), rotation=Rotation.random_cardinal_rotation())
     else:
         raise ValueError(f"Unsupported prop type: {prop_type}")
         

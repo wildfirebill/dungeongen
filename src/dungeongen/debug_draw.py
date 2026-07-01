@@ -101,6 +101,14 @@ def debug_draw_grid_label(x: int, y: int, text: str, color: str = 'DARK_BLUE') -
     """Draw text label above a grid point."""
     if _debug_canvas is None:
         return
+    px, py = grid_to_pixel(x, y)
+    paint = skia.Paint(
+        Color=DEBUG_COLORS.get(color, DEBUG_COLORS['DARK_BLUE']),
+        Style=skia.Paint.kStroke_Style,
+        StrokeWidth=1,
+    )
+    font = skia.Font(None, 12)
+    _debug_canvas.drawString(text, px, py - 4, font, paint)
 
 
 def debug_draw_grid_cell(x: int, y: int, fill_color: int, outline_color: Optional[int] = None,

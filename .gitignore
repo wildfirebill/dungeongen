@@ -5,9 +5,8 @@ __pycache__
 .DS_Store
 .vscode/*
 !.vscode/settings.json
-/*.png
-/*.svg
 /*.pdf
+/debugger/
 /output/
 /attic/
 /test_results/

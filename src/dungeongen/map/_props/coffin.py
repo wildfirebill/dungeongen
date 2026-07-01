@@ -11,7 +11,10 @@ from dungeongen.map.enums import Layers
 if TYPE_CHECKING:
     from dungeongen.map.map import Map
 
-COFFIN_PROP_TYPE = PropType(is_decoration=True)
+COFFIN_PROP_TYPE = PropType(
+    is_decoration=True,
+    boundary_shape=Rectangle(-20, -10, 40, 20)
+)
 
 class Coffin(Prop):
     """A coffin-shaped prop with nested polygons."""

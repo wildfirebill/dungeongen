@@ -277,11 +277,13 @@ class ShapeGroup(Shape):
         # Get bounds from final path which accounts for excludes
         path_bounds = self.path.getBounds()
         
-        # Sanity check the bounds
-        if (abs(path_bounds.left()) > 4200 or abs(path_bounds.top()) > 4200 or
-            path_bounds.width() > 4200 or path_bounds.height() > 4200):
+        # Sanity check the bounds (200 grid cells @ 64px/cell = 12800)
+        from dungeongen.constants import CELL_SIZE
+        limit = 200 * CELL_SIZE
+        if (abs(path_bounds.left()) > limit or abs(path_bounds.top()) > limit or
+            path_bounds.width() > limit or path_bounds.height() > limit):
             raise ValueError(
-                f"Shape group bounds exceed reasonable limits (±3200): "
+                f"Shape group bounds exceed reasonable limits (±{limit}): "
                 f"pos=({path_bounds.left()}, {path_bounds.top()}), "
                 f"size={path_bounds.width()}x{path_bounds.height()}"
             )

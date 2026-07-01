@@ -11,5 +11,10 @@ from dungeongen.map._props.altar import Altar
 from dungeongen.map._props.column import Column, ColumnType
 from dungeongen.map._props.fountain import Fountain
 from dungeongen.map._props.stairs import StairsProp
+from dungeongen.map._props.star import Star
+from dungeongen.map._props.podium import Podium
+from dungeongen.map._props.curtains import Curtains
+from dungeongen.map._props.barrels import Barrels
 
-__all__ = [ "Coffin", "Dias", "Rock", "Altar", "Column", "ColumnType", "Fountain", "StairsProp" ]
+__all__ = [ "Coffin", "Dias", "Rock", "Altar", "Column", "ColumnType", "Fountain", "StairsProp",
+            "Star", "Podium", "Curtains", "Barrels" ]

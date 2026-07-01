@@ -29,6 +29,7 @@ class DoorType(Enum):
     """Door type enum."""
     OPEN = auto()   # Open doorway
     CLOSED = auto()   # Closed door
+    LOCKED = auto()   # Locked door (requires key shards)
 
 # Amount to round the door side corners by
 DOOR_SIDE_ROUNDING = 8.0
@@ -53,13 +54,14 @@ class Door(MapElement):
             open: Initial open/closed state
         """
         
-        # Validate position is within reasonable limits
-        if abs(x) > 4200 or abs(y) > 4200:
-            raise ValueError(f"Door position ({x}, {y}) exceeds reasonable limits (±3200)")
+        # Validate position is within reasonable limits (up to 200 grid cells @ 64px/cell = 12800)
+        if abs(x) > 200 * CELL_SIZE or abs(y) > 200 * CELL_SIZE:
+            raise ValueError(f"Door position ({x}, {y}) exceeds reasonable limits (±{200 * CELL_SIZE})")
         
         self._x = x
         self._y = y
         self._width = self._height = CELL_SIZE
+        self._door_type = door_type
         self._open = (door_type == DoorType.OPEN)
         self._orientation = orientation
         
@@ -193,52 +195,78 @@ class Door(MapElement):
     def draw(self, canvas: skia.Canvas, layer: 'Layers' = Layers.PROPS) -> None:
         """Draw the door if it's closed."""
         if not self._open and layer == Layers.OVERLAY:
-            # Create paint for door
-            door_paint = skia.Paint(
-                AntiAlias=True,
-                Style=skia.Paint.kFill_Style,
-                Color=self._map.options.prop_light_color
-            )
-            
             # Calculate door rectangle dimensions
             if self._orientation == DoorOrientation.HORIZONTAL:
-                # Door width is 1/6 of cell size
                 door_width = self._width / 6
-                # Door height is 55% of cell height
                 door_height = self._height * 0.55
-                # Center the door
                 door_x = self._x + (self._width - door_width) / 2
                 door_y = self._y + (self._height - door_height) / 2
             else:
-                # Door width is 60% of cell width
                 door_width = self._width * 0.6
-                # Door height is 1/5 of cell size
                 door_height = self._height / 5
-                # Center the door
                 door_x = self._x + (self._width - door_width) / 2
                 door_y = self._y + (self._height - door_height) / 2
-            
-            # Create door rectangle
+
             door = Rectangle(door_x, door_y, door_width, door_height, inflate=1.0)
             if not door.is_valid:
                 logger.warning(LogTags.VALIDATION, "Door rectangle is invalid!")
-            
-            # Draw filled door with thinner stroke
-            fill_paint = skia.Paint(
-                AntiAlias=True,
-                Style=skia.Paint.kFill_Style,
-                Color=self._map.options.room_color
-            )
-            door.draw(canvas, fill_paint)
-            
-            # Draw border with half the normal border width
-            border_paint = skia.Paint(
-                AntiAlias=True,
-                Style=skia.Paint.kStroke_Style,
-                StrokeWidth=self._map.options.door_stroke_width,
-                Color=self._map.options.border_color
-            )
-            door.draw(canvas, border_paint)
+
+            if self._door_type == DoorType.LOCKED:
+                locked_fill = skia.Paint(
+                    AntiAlias=True,
+                    Style=skia.Paint.kFill_Style,
+                    Color=skia.ColorSetARGB(80, 65, 105, 225)
+                )
+                door.draw(canvas, locked_fill)
+                locked_border = skia.Paint(
+                    AntiAlias=True,
+                    Style=skia.Paint.kStroke_Style,
+                    StrokeWidth=self._map.options.door_stroke_width,
+                    Color=skia.ColorSetARGB(200, 65, 105, 225)
+                )
+                door.draw(canvas, locked_border)
+                cx = self._x + self._width / 2
+                cy = self._y + self._height / 2
+                ls = CELL_SIZE * 0.15
+                lock_paint = skia.Paint(
+                    AntiAlias=True,
+                    Style=skia.Paint.kStroke_Style,
+                    StrokeWidth=2.0,
+                    Color=skia.Color(255, 255, 255)
+                )
+                path = skia.Path()
+                if self._orientation == DoorOrientation.HORIZONTAL:
+                    path.moveTo(cx - ls * 0.4, cy + ls * 0.3)
+                    path.lineTo(cx - ls * 0.4, cy - ls * 0.1)
+                    path.arcTo(skia.Rect.MakeXYWH(cx - ls * 0.6, cy - ls * 0.6, ls * 1.2, ls * 1.2), 180, -180, False)
+                    path.lineTo(cx + ls * 0.4, cy - ls * 0.1)
+                    path.lineTo(cx + ls * 0.4, cy + ls * 0.3)
+                    path.close()
+                    path.addRect(skia.Rect.MakeXYWH(cx - ls * 0.15, cy, ls * 0.3, ls * 0.15))
+                else:
+                    path.moveTo(cx - ls * 0.3, cy + ls * 0.4)
+                    path.lineTo(cx - ls * 0.3, cy - ls * 0.1)
+                    path.arcTo(skia.Rect.MakeXYWH(cx - ls * 0.6, cy - ls * 0.6, ls * 1.2, ls * 1.2), 180, -180, False)
+                    path.lineTo(cx + ls * 0.3, cy - ls * 0.1)
+                    path.lineTo(cx + ls * 0.3, cy + ls * 0.4)
+                    path.close()
+                    path.addRect(skia.Rect.MakeXYWH(cx - ls * 0.15, cy, ls * 0.3, ls * 0.15))
+                canvas.drawPath(path, lock_paint)
+            else:
+                fill_color = self._map.options.room_color if self._door_type == DoorType.CLOSED else skia.ColorSetARGB(80, 196, 180, 84)
+                fill_paint = skia.Paint(
+                    AntiAlias=True,
+                    Style=skia.Paint.kFill_Style,
+                    Color=fill_color
+                )
+                door.draw(canvas, fill_paint)
+                border_paint = skia.Paint(
+                    AntiAlias=True,
+                    Style=skia.Paint.kStroke_Style,
+                    StrokeWidth=self._map.options.door_stroke_width,
+                    Color=self._map.options.border_color
+                )
+                door.draw(canvas, border_paint)
             
     @classmethod
     def from_grid(cls, grid_x: float, grid_y: float, orientation: DoorOrientation, door_type: DoorType = DoorType.OPEN) -> 'Door':

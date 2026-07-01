@@ -414,7 +414,7 @@ class Passage(MapElement):
     def _check_bounds_sanity(self) -> None:
         """Verify that passage bounds are within reasonable limits."""
         bounds = self.shape.bounds
-        if bounds.grid_width > 100 or bounds.grid_height > 100:
+        if bounds.grid_width > 200 or bounds.grid_height > 200:
             raise ValueError(f"Passage bounds {bounds} exceed reasonable limits")
             
     def draw_occupied(self, grid: 'OccupancyGrid', element_idx: int) -> None:

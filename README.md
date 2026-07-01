@@ -29,7 +29,7 @@ Then open http://localhost:5050 in your browser to generate dungeons interactive
 ### Rendering
 - **Hand-drawn aesthetic** with crosshatch shading and organic lines
 - **Water features** with procedural shorelines and ripple effects
-- **Room decorations**: columns, altars, fountains, dais platforms, rocks
+- **Room decorations**: columns, altars, fountains, dais platforms, rocks, stars, podiums, curtains, barrels, coffins
 - **High-quality SVG and PNG output**
 - **Grid overlay** for tabletop play
 
@@ -46,6 +46,7 @@ dungeongen/
 ├── src/dungeongen/      # Main package
 │   ├── layout/          # Dungeon layout generation
 │   │   ├── generator.py # Main procedural generator
+│   │   ├── numbering.py # Longest-path-first DFS room numbering
 │   │   ├── models.py    # Room, Passage, Door data models
 │   │   ├── params.py    # Generation parameters
 │   │   └── validator.py # Layout validation
@@ -76,6 +77,7 @@ dungeongen/
 │
 ├── tests/               # Test suite
 ├── docs/                # Documentation
+├── debugger/            # Analysis and debugging scripts
 └── pyproject.toml       # Package configuration
 ```
 
@@ -139,12 +141,16 @@ dungeon_map.render_to_svg('my_dungeon.svg')
 - `MEDIUM` - 10-20 rooms
 - `LARGE` - 20-35 rooms
 - `XLARGE` - 35-50 rooms
+- `XXLARGE` - 50-75 rooms
+- `XXXLARGE` - 75-100 rooms
+- `MEGA` - 100-125 rooms
+- `ULTIMATE` - 125-150 rooms
 
 ### Symmetry Types
 - `NONE` - Asymmetric layout
 - `BILATERAL` - Mirror symmetry (left/right)
-- `RADIAL_2` - 180° rotational symmetry *(future)*
-- `RADIAL_4` - 90° rotational symmetry *(future)*
+- `RADIAL_2` - 180° rotational symmetry
+- `RADIAL_4` - 90° rotational symmetry
 
 ### Water Depth
 - `DRY` - No water
@@ -153,9 +159,22 @@ dungeon_map.render_to_svg('my_dungeon.svg')
 - `LAKES` - ~82% coverage
 - `FLOODED` - ~90% coverage
 
+## Modifications by @wildfirebill
+
+Fixes and upgrades to the original codebase:
+
+- **Expanded dungeon sizes**: Added `XXLARGE` (50-75), `XXXLARGE` (75-100), `ULTIMATE` (125-150) tiers between XLARGE and MEGA
+- **Coordinate limit fixes**: Raised hardcoded coordinate limits (4200 → 12800 map units) across the Skia renderer (door, exit, shape group bounds, passage grid size) so MEGA/ULTIMATE dungeons render without crashing
+- **Boss rooms & key shards**: Added red glow border for boss rooms, diamond key-shard item icons, locked door padlock overlay, and boss key-requirement labels to the Skia/PNG render pipeline (was layout-SVG-only)
+- **Auto-rotate transform**: Map rotation (0-360°) applied around center with auto-recomputed bounds for fitting
+- **Room names & dungeon titles**: Deterministic room name generation from tags+seed+number, dungeon title from seed, rendered on the map
+- **Webview UI additions**: Rotation control, room names toggle, dungeon title toggle
+
 ## Acknowledgments
 
-This project was inspired by [**watabou's One Page Dungeon**](https://watabou.itch.io/one-page-dungeon), a fantastic procedural dungeon generator. The hand-drawn crosshatch aesthetic and overall visual style draw heavily from watabou's work.
+This project was originally created by [**benjcooley**](https://github.com/benjcooley). Many thanks for the excellent procedural generation and rendering system.
+
+The project was inspired by [**watabou's One Page Dungeon**](https://watabou.itch.io/one-page-dungeon), a fantastic procedural dungeon generator. The hand-drawn crosshatch aesthetic and overall visual style draw heavily from watabou's work.
 
 - **One Page Dungeon Generator**: https://watabou.itch.io/one-page-dungeon
 - **watabou's other generators**: https://watabou.itch.io/
@@ -165,13 +184,7 @@ This project was inspired by [**watabou's One Page Dungeon**](https://watabou.it
 This is a complete rewrite in Python, not a port. Options do not work identically as this is a completely different codebase. Key differences:
 
 **Not yet implemented:**
-- Only bilateral (mirror) symmetry is supported; linear, radial, and other layout modes are planned
-- Some props are missing (casket, star, podium, curtains, barrels)
 - Various bugs and edge cases - not everything works perfectly
-
-**Will not be added:**
-- Auto-rotate transform for diagonal map views - this library outputs maps for further processing
-- Auto-generated text, titles, and descriptions - this is a map generator, not a complete document generator. That being said you're welcome to add your own dungeon bits
 
 ## License
 
@@ -180,3 +193,5 @@ MIT License - See [LICENSE](LICENSE) file for details.
 ---
 
 ![Example Dungeon](https://raw.githubusercontent.com/benjcooley/dungeongen/main/docs/dungeon_example.png)
+
+![150-room ULTIMATE Dungeon](150room.png)

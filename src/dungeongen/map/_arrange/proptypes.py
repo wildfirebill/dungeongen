@@ -24,6 +24,12 @@ class PropType(StrEnum):
     SQUARE_COLUMN = auto() 
     DIAS = auto()
     
+    # Decorations
+    STAR = auto()
+    PODIUM = auto()
+    CURTAINS = auto()
+    BARRELS = auto()
+    
     @classmethod
     def rock_types(cls) -> list['PropType']:
         """Get all rock prop types."""
@@ -47,5 +53,20 @@ class PropType(StrEnum):
             return Rock.create_medium()
         elif self == PropType.LARGE_ROCK:
             return Rock.create_large()
+        elif self == PropType.COFFIN:
+            from dungeongen.map._props.coffin import Coffin, COFFIN_PROP_TYPE
+            return Coffin(COFFIN_PROP_TYPE, (0, 0), rotation=rotation)
+        elif self == PropType.STAR:
+            from dungeongen.map._props.star import Star
+            return Star((0, 0), rotation=rotation)
+        elif self == PropType.PODIUM:
+            from dungeongen.map._props.podium import Podium
+            return Podium((0, 0), rotation=rotation)
+        elif self == PropType.CURTAINS:
+            from dungeongen.map._props.curtains import Curtains
+            return Curtains((0, 0), rotation=rotation)
+        elif self == PropType.BARRELS:
+            from dungeongen.map._props.barrels import Barrels
+            return Barrels((0, 0), rotation=rotation)
         else:
             raise ValueError(f"Unsupported prop type: {self}")

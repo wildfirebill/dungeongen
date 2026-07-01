@@ -53,8 +53,8 @@ class Exit(MapElement):
             y: Y coordinate in map units
             direction: Direction the exit leads OUT (away from dungeon)
         """
-        if abs(x) > 4200 or abs(y) > 4200:
-            raise ValueError(f"Exit position ({x}, {y}) exceeds reasonable limits (±4200)")
+        if abs(x) > 200 * CELL_SIZE or abs(y) > 200 * CELL_SIZE:
+            raise ValueError(f"Exit position ({x}, {y}) exceeds reasonable limits (±{200 * CELL_SIZE})")
         
         self._x = x
         self._y = y

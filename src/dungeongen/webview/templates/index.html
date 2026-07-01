@@ -330,6 +330,11 @@
                 <div class="tile" data-group="size" data-value="small">Small</div>
                 <div class="tile" data-group="size" data-value="medium">Med</div>
                 <div class="tile" data-group="size" data-value="large">Large</div>
+                <div class="tile" data-group="size" data-value="xlarge">X-L</div>
+                <div class="tile" data-group="size" data-value="xxlarge">XX-L</div>
+                <div class="tile" data-group="size" data-value="xxxlarge">XXX-L</div>
+                <div class="tile" data-group="size" data-value="mega">MEGA</div>
+                <div class="tile" data-group="size" data-value="ultimate">ULTI</div>
                 
                 <div class="sep"></div>
                 
@@ -381,6 +386,17 @@
                 <div class="tile active" data-toggle="halls">Halls</div>
                 <div class="tile" data-toggle="secrets">Secret</div>
                 -->
+                
+                <div class="sep"></div>
+                
+                <span class="group-label">Rot:</span>
+                <input type="number" id="rotation_degrees" min="0" max="360" value="0" style="width:50px;background:var(--bg-tile);border:1px solid var(--border);color:var(--text);padding:2px 4px;border-radius:3px;font-size:0.7rem;font-family:inherit;">
+                <span style="font-size:0.55rem;color:var(--text-dim);">&deg;</span>
+                
+                <div class="sep"></div>
+                
+                <div class="tile active" data-toggle="show_room_names">Names</div>
+                <div class="tile active" data-toggle="show_dungeon_title">Title</div>
                 
                 <div class="sep"></div>
                 
@@ -530,6 +546,9 @@
             params.water_res = parseFloat(document.getElementById('water_res').value);
             params.water_stroke = parseFloat(document.getElementById('water_stroke').value);
             params.water_ripple = parseFloat(document.getElementById('water_ripple').value);
+            
+            // Rotation
+            params.rotation_degrees = parseFloat(document.getElementById('rotation_degrees').value) || 0;
             
             return params;
         }

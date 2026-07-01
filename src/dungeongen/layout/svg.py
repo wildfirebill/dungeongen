@@ -28,6 +28,8 @@ class SVGRenderer:
             'hub': '#6a8a6a',
             'dead_end': '#8a6a6a',
             'lair': '#8a6a8a',
+            'boss': '#8a2a2a',         # Dark crimson for boss rooms
+            'sanctum': '#c4a454',       # Gold for temple sanctum
         }
         
         # Door colors - bright and visible
@@ -119,6 +121,11 @@ class SVGRenderer:
             for room in dungeon.rooms.values():
                 if room.number > 0:
                     svg_parts.append(self._render_room_number(room, offset_x, offset_y))
+            
+            # Items (render on top of room numbers)
+            for room in dungeon.rooms.values():
+                if room.items:
+                    svg_parts.append(self._render_items(room, offset_x, offset_y))
         
         # Violations (render as red X markers)
         if violations:
@@ -225,10 +232,15 @@ class SVGRenderer:
         """Render a single room."""
         # Determine fill color based on tags
         fill = self.room_fill
+        is_boss = False
+        boss_keys = 0
         for tag in room.tags:
             if tag in self.special_colors:
                 fill = self.special_colors[tag]
-                break
+                if tag == 'boss':
+                    is_boss = True
+            if tag.startswith('keys:'):
+                boss_keys = int(tag.split(':')[1])
         
         # Junction meta-rooms get special rendering
         if room.is_junction:
@@ -257,6 +269,41 @@ class SVGRenderer:
                 f'<rect x="{px}" y="{py}" width="{pw}" height="{ph}" '
                 f'fill="{fill}" stroke="{self.room_stroke}" stroke-width="2" rx="3"/>'
             )
+        
+        # Boss room: add glowing border and key requirement text
+        if is_boss:
+            cx, cy = room.center
+            px_center = cx * self.grid_size + offset_x
+            py_center = cy * self.grid_size + offset_y
+            
+            # Glowing border ring
+            if room.shape == RoomShape.CIRCLE:
+                r = (room.width / 2) * self.grid_size
+                svg += (
+                    f'<circle cx="{px_center}" cy="{py_center}" r="{r + 4}" '
+                    f'fill="none" stroke="#ff4444" stroke-width="3" opacity="0.6"/>'
+                )
+            else:
+                pxx = room.x * self.grid_size + offset_x - 4
+                pyy = room.y * self.grid_size + offset_y - 4
+                pww = room.width * self.grid_size + 8
+                phh = room.height * self.grid_size + 8
+                svg += (
+                    f'<rect x="{pxx}" y="{pyy}" width="{pww}" height="{phh}" '
+                    f'fill="none" stroke="#ff4444" stroke-width="3" rx="5" opacity="0.6"/>'
+                )
+            
+            # Key requirement label
+            if boss_keys > 0:
+                # Place at top of room
+                top_y = room.y * self.grid_size + offset_y - 12
+                cxx = (room.x + room.width / 2) * self.grid_size + offset_x
+                svg += (
+                    f'<text x="{cxx}" y="{top_y}" '
+                    f'font-size="11" fill="#ffaa00" text-anchor="middle" '
+                    f'font-family="sans-serif" font-weight="bold">'
+                    f'🔒 {boss_keys} 🔑s</text>'
+                )
         
         # Add label if enabled
         if self.show_labels:
@@ -644,6 +691,44 @@ class SVGRenderer:
             f'font-family="sans-serif" font-weight="bold" opacity="0.7">'
             f'{room.number}</text>'
         )
+    
+    def _render_items(self, room: Room, offset_x: int, offset_y: int) -> str:
+        """Render item pickups (key shards) in rooms as small diamond icons."""
+        parts = ['<g class="items">']
+        
+        for i, item in enumerate(room.items):
+            # Position items horizontally near the bottom of the room
+            cx, cy = room.center_grid
+            count = len(room.items)
+            spacing = self.grid_size * 0.5
+            total_width = count * spacing
+            start_x = (cx + 0.5) * self.grid_size + offset_x - total_width / 2 + spacing / 2
+            item_y = (cy + 0.5) * self.grid_size + offset_y + self.grid_size * 0.4
+            
+            ix = start_x + i * spacing
+            
+            if item == 'key_shard':
+                # Golden diamond for key shard
+                size = self.grid_size * 0.3
+                parts.append(
+                    f'<g transform="translate({ix}, {item_y})">'
+                    f'<rect x="{-size/2}" y="{-size/2}" '
+                    f'width="{size}" height="{size}" '
+                    f'fill="#ffdd44" stroke="#aa8800" stroke-width="1.5" '
+                    f'transform="rotate(45)" rx="2"/>'
+                    f'<text y="{size*0.15}" font-size="{size*0.8}" fill="#000" '
+                    f'text-anchor="middle" dominant-baseline="middle">🔑</text>'
+                    f'</g>'
+                )
+            else:
+                # Generic item circle
+                parts.append(
+                    f'<circle cx="{ix}" cy="{item_y}" r="{self.grid_size * 0.2}" '
+                    f'fill="#88ddff" stroke="#4488aa" stroke-width="1"/>'
+                )
+        
+        parts.append('</g>')
+        return '\n'.join(parts)
     
     def _shade_color(self, hex_color: str, factor: float) -> str:
         """Lighten or darken a hex color by a factor (1.0 = original)."""

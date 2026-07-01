@@ -100,6 +100,7 @@ class Room:
     tags: List[str] = field(default_factory=list)
     connections: List[str] = field(default_factory=list)
     number: int = 0  # Room number (distance from entrance, 1 = entrance room)
+    items: List[str] = field(default_factory=list)  # Key shards / items found in this room
     
     @property
     def center_grid(self) -> Tuple[int, int]:

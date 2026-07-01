@@ -7,6 +7,7 @@ from flask import Flask, render_template, request, jsonify
 from dungeongen.layout import DungeonGenerator, GenerationParams, DungeonSize, SymmetryType, DungeonArchetype, DungeonValidator
 from dungeongen.layout import SVGRenderer
 from .adapter import convert_dungeon
+from dungeongen.options import Options
 
 app = Flask(__name__)
 
@@ -32,6 +33,10 @@ def generate():
         'medium': DungeonSize.MEDIUM,
         'large': DungeonSize.LARGE,
         'xlarge': DungeonSize.XLARGE,
+        'xxlarge': DungeonSize.XXLARGE,
+        'xxxlarge': DungeonSize.XXXLARGE,
+        'mega': DungeonSize.MEGA,
+        'ultimate': DungeonSize.ULTIMATE,
     }
     params.size = size_map.get(data.get('size', 'medium'), DungeonSize.MEDIUM)
     
@@ -131,6 +136,9 @@ def generate():
     
     # Display options
     show_numbers = data.get('show_numbers', True)
+    rotation_degrees = float(data.get('rotation_degrees', 0.0))
+    show_room_names = data.get('show_room_names', False)
+    show_dungeon_title = data.get('show_dungeon_title', False)
     
     # Seed
     seed = data.get('seed')
@@ -176,18 +184,21 @@ def generate():
             water_res=water_res,
             water_stroke=water_stroke,
             water_ripple=water_ripple,
-            show_numbers=show_numbers
+            show_numbers=show_numbers,
+            rotation_degrees=rotation_degrees,
+            show_room_names=show_room_names,
+            show_dungeon_title=show_dungeon_title
         )
         if render_svg:
-            print(f"[Render] Success: {len(render_svg)} bytes SVG")
+            app.logger.info("Render: %d bytes SVG", len(render_svg))
         else:
             render_error = "render_dungeon_to_svg returned None"
-            print(f"[Render] Failed: {render_error}")
+            app.logger.error("Render failed: %s", render_error)
     except Exception as e:
         import traceback
         error_traceback = traceback.format_exc()
         render_error = f"{type(e).__name__}: {e}\n\n{error_traceback}"
-        print(f"[Render] Exception: {e}")
+        app.logger.error("Render exception: %s", e)
         traceback.print_exc()
     
     return jsonify({
@@ -207,24 +218,22 @@ def generate():
     })
 
 
-def render_dungeon_to_svg(dungeon, grid_size=20, padding=40, water_depth=0.0, water_scale=0.018, water_res=0.2, water_stroke=3.5, water_ripple=8.0, show_numbers=True):
+def render_dungeon_to_svg(dungeon, grid_size=20, padding=40, water_depth=0.0, water_scale=0.018, water_res=0.2, water_stroke=3.5, water_ripple=8.0, show_numbers=True, rotation_degrees=0.0, show_room_names=False, show_dungeon_title=False):
     """Render dungeon using dungeongen and return as SVG string.
     
     Renders with same framing as layout SVG so rooms align when switching views.
     Returns resolution-independent SVG.
     """
-    import sys
-    sys.path.insert(0, '/Users/benjamincooley/projects/dungeongen')
     import skia
     
     # Get dungeon bounds (same as SVG renderer uses)
     bounds = dungeon.bounds  # (min_x, min_y, max_x, max_y) in grid coords
     
     # Pre-validate dungeon size to prevent Skia crashes
-    # Map uses 64 units per grid cell, limit is ~4200 map units
+    # Map uses 64 units per grid cell, limit is 200 grid cells (12800 map units)
     dungeon_width = bounds[2] - bounds[0]
     dungeon_height = bounds[3] - bounds[1]
-    max_grid_size = 60  # ~3840 map units, safe margin below 4200 limit
+    max_grid_size = 200  # matches map.py MAX_DIMENSION (200 * CELL_SIZE)
     
     if dungeon_width > max_grid_size or dungeon_height > max_grid_size:
         raise ValueError(
@@ -236,6 +245,13 @@ def render_dungeon_to_svg(dungeon, grid_size=20, padding=40, water_depth=0.0, wa
     canvas_width = (bounds[2] - bounds[0]) * grid_size + padding * 2
     canvas_height = (bounds[3] - bounds[1]) * grid_size + padding * 2
     
+    # Build options with rotation and display settings
+    opts = Options(
+        rotation_degrees=rotation_degrees,
+        show_room_names=show_room_names,
+        show_dungeon_title=show_dungeon_title
+    )
+
     # Convert to dungeongen format with water settings
     # The adapter normalizes coords: dungeon grid (bounds[0], bounds[1]) -> map grid (0, 0)
     dungeon_map = convert_dungeon(
@@ -245,7 +261,8 @@ def render_dungeon_to_svg(dungeon, grid_size=20, padding=40, water_depth=0.0, wa
         water_res=water_res,
         water_stroke=water_stroke,
         water_ripple=water_ripple,
-        show_numbers=show_numbers
+        show_numbers=show_numbers,
+        options=opts
     )
     
     # dungeongen uses 64 map units per grid cell (CELL_SIZE constant)

@@ -48,6 +48,7 @@ class Map:
         self._bounds_dirty: bool = True
         self.occupancy = OccupancyGrid(200, 200)  # Initialize with default size
         self._hatch_tile: Optional[HatchTileData] = None  # Cached crosshatch tile
+        self._title: str = ""  # Dungeon title
         self._water_layer: Optional[WaterLayer] = None  # Water generation layer
         self._water_depth: float = WaterDepth.DRY  # Water depth level (0 = disabled)
     
@@ -118,6 +119,14 @@ class Map:
         return self._water_layer
 
     @property
+    def title(self) -> str:
+        return self._title
+
+    @title.setter
+    def title(self, value: str) -> None:
+        self._title = value
+
+    @property
     def elements(self) -> Sequence[MapElement]:
         """Read only access to map elements."""
         return self._elements
@@ -156,7 +165,7 @@ class Map:
         
         # Validate element bounds
         bounds = element.bounds
-        MAX_DIMENSION = 100 * CELL_SIZE  # 100 grid cells
+        MAX_DIMENSION = 200 * CELL_SIZE  # 200 grid cells (supports MEGA dungeons)
         
         if (abs(bounds.x) > MAX_DIMENSION or 
             abs(bounds.y) > MAX_DIMENSION or
@@ -331,42 +340,64 @@ class Map:
         return regions
 
     def calculate_fit_transform(self, canvas_width: int, canvas_height: int) -> skia.Matrix:
-        """Calculate a transform matrix that scales and centers the map to fit a canvas.
+        """Calculate a transform matrix that scales, centers, and optionally rotates the map.
         
         The transform will:
         - Scale the map uniformly to fit within the canvas dimensions
         - Center the map horizontally and vertically
         - Apply padding based on options.map_border_cells
+        - Rotate the map by options.rotation_degrees (clockwise) around its center
         
         Args:
             canvas_width: Width of the target canvas in pixels
             canvas_height: Height of the target canvas in pixels
             
         Returns:
-            A Skia Matrix with scale and translation to fit the map in the canvas
+            A Skia Matrix with scale, rotation, and translation to fit the map in the canvas
         """
         bounds = self.bounds
-        
+        rotation = self.options.rotation_degrees
+
         # Convert padding from grid units to drawing units
         padding_x, padding_y = grid_to_map(self.options.map_border_cells, self.options.map_border_cells)
-        
-        # Add padding to bounds for scale calculation
-        padded_width = bounds.width + (2 * padding_x)
-        padded_height = bounds.height + (2 * padding_y)
-        
-        # Calculate scale to fit padded bounds in canvas
-        scale_x = canvas_width / padded_width
-        scale_y = canvas_height / padded_height
-        scale = min(scale_x, scale_y)
-        
-        # Calculate translation to center the map with padding
-        translate_x = ((canvas_width - (bounds.width * scale)) / 2) - (bounds.x * scale)
-        translate_y = ((canvas_height - (bounds.height * scale)) / 2) - (bounds.y * scale)
-        
-        # Create transform matrix
-        matrix = skia.Matrix()
-        matrix.setScale(scale, scale)
-        matrix.postTranslate(translate_x, translate_y)
+
+        map_cx = bounds.x + bounds.width / 2
+        map_cy = bounds.y + bounds.height / 2
+
+        if rotation != 0:
+            rad = math.radians(rotation)
+            c = abs(math.cos(rad))
+            sa = abs(math.sin(rad))
+
+            padded_w = bounds.width + (2 * padding_x)
+            padded_h = bounds.height + (2 * padding_y)
+
+            rot_w = padded_w * c + padded_h * sa
+            rot_h = padded_w * sa + padded_h * c
+
+            scale_x = canvas_width / rot_w
+            scale_y = canvas_height / rot_h
+            scale = min(scale_x, scale_y)
+
+            matrix = skia.Matrix()
+            matrix.postTranslate(-map_cx, -map_cy)
+            matrix.postRotate(rotation)
+            matrix.postScale(scale, scale)
+            matrix.postTranslate(canvas_width / 2, canvas_height / 2)
+        else:
+            padded_width = bounds.width + (2 * padding_x)
+            padded_height = bounds.height + (2 * padding_y)
+
+            scale_x = canvas_width / padded_width
+            scale_y = canvas_height / padded_height
+            scale = min(scale_x, scale_y)
+
+            translate_x = ((canvas_width - (bounds.width * scale)) / 2) - (bounds.x * scale)
+            translate_y = ((canvas_height - (bounds.height * scale)) / 2) - (bounds.y * scale)
+
+            matrix = skia.Matrix()
+            matrix.setScale(scale, scale)
+            matrix.postTranslate(translate_x, translate_y)
         return matrix
 
     def create_rectangular_room(self, grid_x: float, grid_y: float, grid_width: float, grid_height: float) -> 'Room':
@@ -581,6 +612,19 @@ class Map:
 
         # Restore canvas state
         canvas.restore()
+
+        # Draw dungeon title in screen space (unrotated) if enabled
+        if self.options.show_dungeon_title and self._title:
+            title_font_size = 36
+            title_typeface = skia.Typeface('Arial')
+            title_font = skia.Font(title_typeface, title_font_size)
+            title_paint = skia.Paint(
+                Color=skia.ColorSetARGB(180, 255, 255, 255),
+                AntiAlias=True,
+            )
+            text = self._title
+            tw = title_font.measureText(text)
+            canvas.drawString(text, (canvas_width - tw) / 2, 50, title_font, title_paint)
 
     def render_to_png(self, filename: str, width: int = 1200, height: int = 1200) -> None:
         """Render the map to a PNG file.

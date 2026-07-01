@@ -72,6 +72,7 @@ class DungeonGenerator:
         self.occupancy = OccupancyGrid()
         # Track connected room pairs: {(room_id1, room_id2): passage_length}
         self._connected_pairs: dict = {}
+        self._mirror_pairs: dict = {}
     
     def _create_context(self) -> GenerationContext:
         """Create initial generation context from params."""
@@ -147,6 +148,9 @@ class DungeonGenerator:
         # Phase 10: Number rooms using branch-cluster algorithm
         self._number_rooms(dungeon)
         
+        # Phase 10b: Boss room & key shard placement
+        self._apply_boss_and_keys(dungeon)
+        
         # Phase 11: Copy symmetry info to dungeon for prop decoration
         dungeon.mirror_pairs = dict(self._mirror_pairs)
         dungeon.spine_direction = getattr(self, '_spine_direction', 'south')
@@ -193,9 +197,15 @@ class DungeonGenerator:
         elif target_count <= 50:
             spine_length = 4
             max_depth = 4
-        else:
+        elif target_count <= 100:
             spine_length = 5
             max_depth = 5
+        elif target_count <= 150:
+            spine_length = 8
+            max_depth = 8
+        else:
+            spine_length = 10
+            max_depth = 10
         
         # Store target for use in branching decisions
         self._target_room_count = target_count
@@ -224,7 +234,7 @@ class DungeonGenerator:
             self._add_fallback_rooms(dungeon, min_count - current_count, ctx)
     
     # Spine generation constants
-    MAX_SPINE_LENGTH = 4  # Max rooms per spine
+    MAX_SPINE_LENGTH = 10  # Max rooms per spine (increased from 4 for large dungeons)
     BRANCH_CHANCE = 0.75  # High chance to branch for more recursion
     
     def _get_spacing_range(self) -> Tuple[int, int]:
@@ -371,7 +381,7 @@ class DungeonGenerator:
             return
         
         placed = 0
-        max_attempts = count * 20
+        max_attempts = max(count * 30, 500)
         attempt = 0
         directions = ['north', 'south', 'east', 'west']
         
@@ -400,16 +410,16 @@ class DungeonGenerator:
                 # Offset-based placement using context spacing
                 min_spacing, max_spacing = ctx.spacing_range
                 min_offset = min_spacing + 2
-                max_offset = max_spacing + 5
+                fallback_radius = max(30, max_spacing * 5)  # Wider search for large dungeons
                 
                 ax, ay = anchor.center_grid
                 
-                for _ in range(10):
-                    offset_x = self.rng.randint(-max_offset, max_offset)
-                    offset_y = self.rng.randint(-max_offset, max_offset)
+                for _ in range(30):  # More attempts for dense grids
+                    offset_x = self.rng.randint(-fallback_radius, fallback_radius)
+                    offset_y = self.rng.randint(-fallback_radius, fallback_radius)
                     
                     if abs(offset_x) < min_offset and abs(offset_y) < min_offset:
-                        offset_x = min_offset if offset_x >= 0 else -min_offset
+                        continue
                     
                     room.x = ax + offset_x
                     room.y = ay + offset_y
@@ -573,145 +583,6 @@ class DungeonGenerator:
         
         return spine_rooms
     
-    # Legacy method - kept for compatibility
-    def _generate_spine(self, dungeon: Dungeon,
-                        start_x: int, start_y: int,
-                        direction: str, length: int,
-                        templates, circle_radii,
-                        placement_seed: int, termination_seed: int,
-                        depth: int, max_depth: int) -> List[Room]:
-        """
-        Generate a spine - a line of rooms connected at centers.
-        At each room, can branch LEFT and RIGHT with sub-spines.
-        Left and right branches use SAME placement_seed, DIFFERENT termination_seeds.
-        """
-        if depth >= max_depth or length <= 0:
-            return []
-        
-        placement_rng = random.Random(placement_seed)
-        termination_rng = random.Random(termination_seed)
-        
-        spine_rooms = []
-        current_x, current_y = start_x, start_y
-        
-        # Limit spine length
-        actual_length = min(length, self.MAX_SPINE_LENGTH)
-        
-        # Direction vectors
-        if direction == 'south':
-            dx, dy = 0, 1
-        elif direction == 'north':
-            dx, dy = 0, -1
-        elif direction == 'east':
-            dx, dy = 1, 0
-        else:  # west
-            dx, dy = -1, 0
-        
-        for i in range(actual_length):
-            # Create room - prefer odd sizes and circles for spine rooms
-            room = self._create_spine_room(templates, circle_radii, placement_rng, direction, i == 0)
-            
-            # Position room so its center aligns with spine
-            room.x = current_x - room.width // 2
-            room.y = current_y - room.height // 2
-            
-            if self._can_place_room(room):
-                dungeon.add_room(room)
-                self._mark_room_in_grid(room)
-                spine_rooms.append(room)
-                
-                # Branch left and right (perpendicular to spine direction)
-                if direction in ('south', 'north'):
-                    left_dir, right_dir = 'west', 'east'
-                else:
-                    left_dir, right_dir = 'north', 'south'
-                
-                # Higher branch chance, ensure recursion continues
-                branch_chance = placement_rng.random()
-                if branch_chance < self.BRANCH_CHANCE and depth < max_depth - 1:
-                    # Generate sub-seeds for branches
-                    branch_placement_seed = placement_rng.randint(0, 2**31)
-                    left_term_seed = termination_rng.randint(0, 2**31)
-                    right_term_seed = termination_rng.randint(0, 2**31)
-                    
-                    # Spacing for branch start
-                    # For tight mode: adjacent placement with 1-cell passage
-                    if self.params.density >= 0.8:
-                        branch_gap = 1  # Adjacent with 1-cell passage
-                    else:
-                        min_spacing, max_spacing = self._get_spacing_range()
-                        branch_gap = placement_rng.randint(min_spacing, max_spacing)
-                    
-                    # LEFT branch
-                    if left_dir == 'west':
-                        left_start_x = room.x - branch_gap
-                        left_start_y = current_y
-                    elif left_dir == 'east':
-                        left_start_x = room.x + room.width + branch_gap
-                        left_start_y = current_y
-                    elif left_dir == 'north':
-                        left_start_x = current_x
-                        left_start_y = room.y - branch_gap
-                    else:  # south
-                        left_start_x = current_x
-                        left_start_y = room.y + room.height + branch_gap
-                    
-                    # Sub-spine length decreases but stays reasonable
-                    sub_length = max(2, actual_length - 1)
-                    
-                    self._generate_spine(
-                        dungeon, left_start_x, left_start_y,
-                        left_dir, sub_length,
-                        templates, circle_radii,
-                        branch_placement_seed, left_term_seed,
-                        depth + 1, max_depth
-                    )
-                    
-                    # RIGHT branch - same placement seed, different termination
-                    terminate_right = random.Random(right_term_seed).random() < self.params.symmetry_break
-                    
-                    if not terminate_right:
-                        if right_dir == 'east':
-                            right_start_x = room.x + room.width + branch_gap
-                            right_start_y = current_y
-                        elif right_dir == 'west':
-                            right_start_x = room.x - branch_gap
-                            right_start_y = current_y
-                        elif right_dir == 'south':
-                            right_start_x = current_x
-                            right_start_y = room.y + room.height + branch_gap
-                        else:  # north
-                            right_start_x = current_x
-                            right_start_y = room.y - branch_gap
-                        
-                        self._generate_spine(
-                            dungeon, right_start_x, right_start_y,
-                            right_dir, sub_length,
-                            templates, circle_radii,
-                            branch_placement_seed,  # SAME seed as left
-                            right_term_seed,
-                            depth + 1, max_depth
-                        )
-            
-            # Move to next position along spine - spacing based on density
-            base_size = room.height if direction in ('south', 'north') else room.width
-            
-            # For tight/compact mode: adjacent placement with just 1-cell passage
-            if self.params.density >= 0.8:
-                # Room edge to room edge = 1 cell (for passage)
-                # So next room center = current center + half current room + 1 + half next room
-                # Since we don't know next room size yet, use base_size as estimate
-                spacing = base_size + 1  # Adjacent with 1-cell passage
-            else:
-                min_spacing, max_spacing = self._get_spacing_range()
-                extra_spacing = placement_rng.randint(min_spacing, max_spacing)
-                spacing = base_size + extra_spacing
-            
-            current_x += dx * spacing
-            current_y += dy * spacing
-        
-        return spine_rooms
-    
     def _create_spine_room(self, templates, circle_radii, rng: random.Random, 
                            direction: str, is_first: bool) -> Room:
         """
@@ -760,15 +631,6 @@ class DungeonGenerator:
         
         return Room(x=0, y=0, width=w, height=h, shape=RoomShape.RECT)
     
-    def _create_junction_room(self, rng: random.Random, direction: str) -> Optional[Room]:
-        """
-        Junction meta-rooms are NOT actual rooms - they're passage configurations.
-        Return None here; junctions are handled separately via _create_junction_passages.
-        """
-        # Junctions are passage-based, not room-based
-        # They'll be created during passage generation, not room generation
-        return None
-    
     def _create_room_template_with_rng(self, templates, circle_radii, rng: random.Random) -> Room:
         """Create a room template using specific RNG (for deterministic replay).
         Uses templates from params (respects cozy/grand settings).
@@ -798,10 +660,10 @@ class DungeonGenerator:
         templates = self.params.get_room_templates()
         circle_radii = self.params.get_circle_radii()
         
-        max_placement_attempts = 50
+        max_placement_attempts = 80 if target_count > 50 else 50
         placed_count = 0
         failed_count = 0
-        max_failures = target_count
+        max_failures = min(target_count * 2, 300)
         
         rooms_to_rotate = []
         
@@ -812,8 +674,14 @@ class DungeonGenerator:
             area_size = 15
         elif target_count <= 25:
             area_size = 22
-        else:
+        elif target_count <= 50:
             area_size = 30
+        elif target_count <= 75:
+            area_size = 40
+        elif target_count <= 100:
+            area_size = 55
+        else:
+            area_size = 75
         
         # Place rooms in one quadrant (positive x, positive y for radial4, or positive y for radial2)
         while placed_count < target_count and failed_count < max_failures:
@@ -878,6 +746,12 @@ class DungeonGenerator:
                 if self._can_place_room(rotated):
                     dungeon.add_room(rotated)
                     self._mark_room_in_grid(rotated)
+        
+        # Fallback: If we didn't reach minimum count, add more rooms via adjacency
+        current_count = len(dungeon.rooms)
+        if current_count < min_count:
+            ctx = self._create_context()
+            self._add_fallback_rooms(dungeon, min_count - current_count, ctx)
     
     def _place_rooms_asymmetric(self, dungeon: Dungeon) -> None:
         """Place rooms without symmetry constraints."""
@@ -887,10 +761,10 @@ class DungeonGenerator:
         templates = self.params.get_room_templates()
         circle_radii = self.params.get_circle_radii()
         
-        max_placement_attempts = 50
+        max_placement_attempts = 80 if target_count > 100 else 50
         placed_count = 0
         failed_count = 0
-        max_failures = target_count
+        max_failures = min(target_count * 2, 300)
         
         # Scale initial placement area based on target count
         if target_count <= 12:
@@ -899,8 +773,12 @@ class DungeonGenerator:
             base_radius = 8
         elif target_count <= 50:
             base_radius = 12
-        else:
+        elif target_count <= 100:
             base_radius = 18
+        elif target_count <= 150:
+            base_radius = 55
+        else:
+            base_radius = 80
         
         while placed_count < target_count and failed_count < max_failures:
             room = self._create_room_template(templates, circle_radii)
@@ -911,7 +789,7 @@ class DungeonGenerator:
                     x = self.rng.randint(-base_radius, base_radius)
                     y = self.rng.randint(-base_radius, base_radius)
                 else:
-                    radius = base_radius + (attempt - 10) // 5 * 3
+                    radius = base_radius + (attempt - 10) // 3 * 5
                     x = self.rng.randint(-radius, radius)
                     y = self.rng.randint(-radius, radius)
                 
@@ -928,6 +806,12 @@ class DungeonGenerator:
             
             if not placed:
                 failed_count += 1
+        
+        # Fallback: If we didn't reach minimum count, add more rooms via adjacency
+        current_count = len(dungeon.rooms)
+        if current_count < min_count:
+            ctx = self._create_context()
+            self._add_fallback_rooms(dungeon, min_count - current_count, ctx)
     
     def _create_room_template(self, templates, circle_radii) -> Room:
         """Create a room with random size/shape but position 0,0.
@@ -1110,9 +994,6 @@ class DungeonGenerator:
         min_y = min(r.y for r in rooms)
         axis_y = (max_y + min_y) / 2
         
-        # Initialize mirror pairs tracking
-        if not hasattr(self, '_mirror_pairs'):
-            self._mirror_pairs = {}
         self._mirror_axis_x = axis_x  # Store for passage mirroring
         
         if self.params.symmetry == SymmetryType.BILATERAL:
@@ -2847,20 +2728,17 @@ class DungeonGenerator:
         
         if entrance_room and entrance_passage and entrance_pos:
             # Add the entrance passage to dungeon (with validation)
-            if not self._add_validated_passage(dungeon, entrance_passage):
-                # Entrance passage validation failed - skip entrance
-                return
-            
-            # Create the main entrance at the end of the passage
-            main_exit = Exit(
-                x=entrance_pos[0],
-                y=entrance_pos[1],
-                direction=entrance_dir,
-                exit_type=ExitType.ENTRANCE,
-                room_id=entrance_room.id,
-                is_main=True
-            )
-            dungeon.add_exit(main_exit)
+            if self._add_validated_passage(dungeon, entrance_passage):
+                # Create the main entrance at the end of the passage
+                main_exit = Exit(
+                    x=entrance_pos[0],
+                    y=entrance_pos[1],
+                    direction=entrance_dir,
+                    exit_type=ExitType.ENTRANCE,
+                    room_id=entrance_room.id,
+                    is_main=True
+                )
+                dungeon.add_exit(main_exit)
         
         # Number rooms by distance from entrance (or first room if no entrance)
         if entrance_room:
@@ -2875,11 +2753,9 @@ class DungeonGenerator:
         Find a room at the edge of the map that faces empty space.
         Returns (room, passage, entrance_pos, direction) or (None, None, None, '').
         """
-        from .occupancy import CellType
-        
         bounds = dungeon.bounds
         rooms = list(dungeon.rooms.values())
-        
+
         # Score rooms by how close they are to the map edge
         def edge_score(room: Room) -> float:
             cx, cy = room.center_grid
@@ -2963,8 +2839,6 @@ class DungeonGenerator:
         
         The entrance passage must not overlap any reserved or occupied grid cells.
         """
-        from .occupancy import CellType
-        
         # Get the edge point where passage connects to room
         room_exit = room.get_edge_point(preferred_dir, 0)
         
@@ -3104,7 +2978,8 @@ class DungeonGenerator:
             # Largest room is the lair
             largest = max(rooms, key=lambda r: r.width * r.height)
             largest.tags.append('lair')
-            largest.tags.append('boss')
+            # Boss room is handled by _apply_boss_and_keys (farthest from entrance)
+            # largest.tags.append('boss')
         
         elif self.params.archetype == DungeonArchetype.TEMPLE:
             # Central room is sanctum
@@ -3116,18 +2991,117 @@ class DungeonGenerator:
                 (r.center[0] - cx)**2 + (r.center[1] - cy)**2)
             closest.tags.append('sanctum')
     
+    def _apply_boss_and_keys(self, dungeon: Dungeon) -> None:
+        """
+        Find the boss room (farthest from entrance by number), add a locked door
+        at its entrance, and place key shards in side-branch rooms.
+        The locked door displays how many shards are needed (e.g. "3 KEYS").
+        """
+        if len(dungeon.rooms) < 5:
+            return
+
+        # Find entrance room (#1) and boss room (highest number)
+        entrance_room = None
+        boss_room = None
+        highest_num = 0
+
+        for room in dungeon.rooms.values():
+            if room.number == 1:
+                entrance_room = room
+            if room.number > highest_num:
+                highest_num = room.number
+                boss_room = room
+
+        if not boss_room or not entrance_room or boss_room.id == entrance_room.id:
+            return
+
+        boss_room.tags.append('boss')
+
+        # Determine number of key shards based on dungeon size
+        room_count = len(dungeon.rooms)
+        if room_count <= 25:
+            shard_count = 1
+        elif room_count <= 50:
+            shard_count = 2
+        elif room_count <= 75:
+            shard_count = 3
+        elif room_count <= 100:
+            shard_count = 4
+        elif room_count <= 125:
+            shard_count = 5
+        else:
+            shard_count = 6
+
+        boss_room.tags.append(f'keys:{shard_count}')
+
+        # Find the passage connecting to the boss room
+        boss_passage = None
+        for passage in dungeon.passages.values():
+            if passage.start_room == boss_room.id or passage.end_room == boss_room.id:
+                boss_passage = passage
+                break
+
+        if boss_passage:
+            boss_entry_waypoint = None
+            if boss_passage.end_room == boss_room.id:
+                boss_entry_waypoint = boss_passage.waypoints[-1] if boss_passage.waypoints else None
+            else:
+                boss_entry_waypoint = boss_passage.waypoints[0] if boss_passage.waypoints else None
+
+            if boss_entry_waypoint:
+                found_door = None
+                for door in dungeon.doors.values():
+                    if door.x == boss_entry_waypoint[0] and door.y == boss_entry_waypoint[1]:
+                        found_door = door
+                        break
+
+                if found_door:
+                    found_door.door_type = DoorType.LOCKED
+                else:
+                    direction = self._get_door_direction(boss_entry_waypoint, boss_room)
+                    locked_door = Door(
+                        x=boss_entry_waypoint[0],
+                        y=boss_entry_waypoint[1],
+                        direction=direction,
+                        door_type=DoorType.LOCKED,
+                        room_id=boss_room.id,
+                        passage_id=boss_passage.id
+                    )
+                    dungeon.add_door(locked_door)
+
+        # Place key shards randomly across the map (excluding entrance and boss)
+        candidates = [
+            r for r in dungeon.rooms.values()
+            if r.id != boss_room.id and r.id != entrance_room.id
+        ]
+        self.rng.shuffle(candidates)
+        for room in candidates[:shard_count]:
+            room.items.append('key_shard')
+
     def _number_rooms(self, dungeon: Dungeon) -> None:
-        """Number rooms using branch-cluster algorithm starting from entrance."""
+        """Number rooms using DFS starting from entrance."""
         if not dungeon.rooms:
             return
         
-        # Use the numbering algorithm
-        numbers = number_dungeon(dungeon)
+        # Find entrance room (#1 was already set by BFS in _generate_exits)
+        entrance_id = next((r.id for r in dungeon.rooms.values() if r.number == 1), None)
         
-        # Apply numbers to rooms
+        # Number all rooms via DFS, then fill gaps for any disconnected rooms
+        numbers = number_dungeon(dungeon, entrance_room_id=entrance_id)
+        
+        # Reset all rooms to 0, then apply DFS numbers
+        for room in dungeon.rooms.values():
+            room.number = 0
         for room_id, num in numbers.items():
             if room_id in dungeon.rooms:
                 dungeon.rooms[room_id].number = num
+        
+        # Number any remaining unnumbered rooms
+        next_num = max(numbers.values(), default=0) + 1
+        for room in dungeon.rooms.values():
+            if room.number == 0:
+                room.number = next_num
+                next_num += 1
     
     def _generate_water(self, dungeon: Dungeon) -> None:
         """Generate water features using noise-based marching squares."""

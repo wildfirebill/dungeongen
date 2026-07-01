@@ -9,7 +9,6 @@ from dungeongen.layout.spatial import Point
 import skia
 from dungeongen.map.occupancy import ElementType
 from dungeongen.logging_config import logger, LogTags
-from dungeongen.logging_config import logger, LogTags
 
 from dungeongen.graphics.math import Point2D
 from dungeongen.graphics.shapes import Rectangle, Circle, Shape
@@ -68,6 +67,9 @@ class Room(MapElement):
                 number: int = 0) -> None:
         self._room_type = room_type
         self._number = number  # Room number for display
+        self._items: List[str] = []
+        self._tags: List[str] = []
+        self._name: str = ""
         if room_type == RoomType.CIRCULAR:
             if width != height:
                 raise ValueError("Circular rooms must have equal width and height.")
@@ -97,6 +99,84 @@ class Room(MapElement):
     def number(self, value: int) -> None:
         """Set the room number for display."""
         self._number = value
+
+    @property
+    def items(self) -> List[str]:
+        return self._items
+
+    @items.setter
+    def items(self, value: List[str]) -> None:
+        self._items = value
+
+    @property
+    def tags(self) -> List[str]:
+        return self._tags
+
+    @tags.setter
+    def tags(self, value: List[str]) -> None:
+        self._tags = value
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @name.setter
+    def name(self, value: str) -> None:
+        self._name = value
+
+    @property
+    def is_boss(self) -> bool:
+        return 'boss' in self._tags
+
+    @property
+    def boss_keys(self) -> int:
+        for tag in self._tags:
+            if tag.startswith('keys:'):
+                return int(tag.split(':')[1])
+        return 0
+
+    def _draw_items(self, canvas: skia.Canvas) -> None:
+        if not self._items and not self.is_boss:
+            return
+        cx = self._bounds.x + self._bounds.width / 2
+        cy = self._bounds.y + self._bounds.height / 2
+        shard_items = [i for i in self._items if i == 'key_shard']
+        count = len(shard_items)
+        if count > 0:
+            spacing = min(self._bounds.width, self._bounds.height) * 0.2
+            total_w = (count - 1) * spacing
+            start_x = cx - total_w / 2
+            for i in range(count):
+                ix = start_x + i * spacing
+                d = min(self._bounds.width, self._bounds.height) * 0.1
+                diamond_paint = skia.Paint(
+                    AntiAlias=True,
+                    Style=skia.Paint.kFill_Style,
+                    Color=skia.ColorSetARGB(220, 255, 221, 68)
+                )
+                border_paint = skia.Paint(
+                    AntiAlias=True,
+                    Style=skia.Paint.kStroke_Style,
+                    StrokeWidth=1.5,
+                    Color=skia.ColorSetARGB(200, 170, 136, 0)
+                )
+                path = skia.Path()
+                path.moveTo(ix, cy - d)
+                path.lineTo(ix + d * 0.6, cy)
+                path.lineTo(ix, cy + d)
+                path.lineTo(ix - d * 0.6, cy)
+                path.close()
+                canvas.drawPath(path, diamond_paint)
+                canvas.drawPath(path, border_paint)
+        if self.is_boss and self.boss_keys > 0:
+            font = skia.Font(skia.Typeface('Arial'), 16)
+            text_paint = skia.Paint(
+                Color=skia.ColorSetARGB(220, 255, 170, 0),
+                AntiAlias=True
+            )
+            label = f"{self.boss_keys} keys"
+            tw = font.measureText(label)
+            canvas.drawString(label, cx - tw / 2, self._bounds.y + 20, font, text_paint)
 
     def _draw_corner(self, canvas: skia.Canvas, corner: Point2D, left: Point2D, right: Point2D) -> None:
         """Draw a single corner decoration.
@@ -172,11 +252,39 @@ class Room(MapElement):
     def draw(self, canvas: 'skia.Canvas', layer: Layers = Layers.PROPS) -> None:
         """Draw the room and its props."""
         if layer == Layers.PROPS:
+            if self.is_boss:
+                glow_paint = skia.Paint(
+                    AntiAlias=True,
+                    Style=skia.Paint.kStroke_Style,
+                    StrokeWidth=4.0,
+                    Color=skia.ColorSetARGB(100, 255, 68, 68)
+                )
+                path = skia.Path()
+                path.addPath(self._shape.to_path())
+                canvas.drawPath(path, glow_paint)
             self.draw_corners(canvas)
         elif layer == Layers.TEXT:
             self._draw_number(canvas)
+            self._draw_items(canvas)
+            self._draw_name(canvas)
         super().draw(canvas, layer)
     
+    def _draw_name(self, canvas: 'skia.Canvas') -> None:
+        if not self._name:
+            return
+        font_size = 18
+        typeface = skia.Typeface('Arial')
+        font = skia.Font(typeface, font_size)
+        text_paint = skia.Paint(
+            Color=skia.ColorSetARGB(140, 255, 255, 255),
+            AntiAlias=True,
+        )
+        cx = self._bounds.x + self._bounds.width / 2
+        cy = self._bounds.y + self._bounds.height + font_size + 4
+        text = self._name
+        tw = font.measureText(text)
+        canvas.drawString(text, cx - tw / 2, cy, font, text_paint)
+
     # Class-level font cache
     _number_typeface: 'skia.Typeface' = None
     

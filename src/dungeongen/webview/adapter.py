@@ -12,12 +12,16 @@ from collections import defaultdict
 
 from dungeongen.layout import Dungeon, Room as LayoutRoom, Passage as LayoutPassage, Door as LayoutDoor
 from dungeongen.layout import RoomShape, DoorType as LayoutDoorType, Exit as LayoutExit, Stair as LayoutStair
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def convert_dungeon(layout_dungeon: Dungeon, water_depth: float = 0.0, 
                     water_scale: float = 0.016, water_res: float = 0.3,
                     water_stroke: float = 3.0, water_ripple: float = 12.0,
-                    show_numbers: bool = True) -> 'Map':
+                    show_numbers: bool = True,
+                    options: Optional['Options'] = None) -> 'Map':
     """Convert a dungeonlayout Dungeon to a dungeongen Map.
     
     Args:
@@ -28,12 +32,13 @@ def convert_dungeon(layout_dungeon: Dungeon, water_depth: float = 0.0,
         water_stroke: Shoreline stroke width
         water_ripple: Ripple inset distance
         show_numbers: Whether to display room numbers
+        options: Optional Options instance. If omitted, creates default Options.
     """
     from dungeongen.map.map import Map
     from dungeongen.map.room import Room
     from dungeongen.options import Options
     
-    options = Options()
+    options = options if options is not None else Options()
     dungeon_map = Map(options)
     
     # Set water if enabled
@@ -66,7 +71,8 @@ def convert_dungeon(layout_dungeon: Dungeon, water_depth: float = 0.0,
     
     # Convert rooms first
     for room_id, layout_room in layout_dungeon.rooms.items():
-        room = _convert_room(layout_room, dungeon_map, offset_x, offset_y, show_numbers)
+        room = _convert_room(layout_room, dungeon_map, offset_x, offset_y, show_numbers,
+                             show_names=options.show_room_names, name_seed=layout_dungeon.seed)
         if room:
             room_map[room_id] = room
             
@@ -102,6 +108,11 @@ def convert_dungeon(layout_dungeon: Dungeon, water_depth: float = 0.0,
             # Same seed + opposite orientation = mirrored decorations
             _decorate_room(room, room_seed, room_orientation)
     
+    # Set dungeon title if enabled
+    if options.show_dungeon_title:
+        from dungeongen.map.names import generate_dungeon_title
+        dungeon_map.title = generate_dungeon_title(layout_dungeon.seed)
+
     # Build door lookup by position
     door_at_pos: Dict[Tuple[int, int], LayoutDoor] = {}
     for door_id, layout_door in layout_dungeon.doors.items():
@@ -202,9 +213,10 @@ def _adjacent_cells(pos: Tuple[int, int]) -> List[Tuple[int, int]]:
 
 
 def _convert_room(layout_room: LayoutRoom, dungeon_map: 'Map', offset_x: int, offset_y: int, 
-                  show_numbers: bool = True) -> Optional['Room']:
+                  show_numbers: bool = True, show_names: bool = False, name_seed: int = 0) -> Optional['Room']:
     """Convert a layout room to a dungeongen room."""
     from dungeongen.map.room import Room, RoomType
+    from dungeongen.map.names import generate_room_name
     
     room_type = RoomType.CIRCULAR if layout_room.shape == RoomShape.CIRCLE else RoomType.RECTANGULAR
     
@@ -216,6 +228,19 @@ def _convert_room(layout_room: LayoutRoom, dungeon_map: 'Map', offset_x: int, of
         room_type=room_type,
         number=layout_room.number if show_numbers else 0
     )
+    
+    if hasattr(layout_room, 'items') and layout_room.items:
+        room.items = layout_room.items
+    if hasattr(layout_room, 'tags') and layout_room.tags:
+        room.tags = layout_room.tags
+    
+    if show_names:
+        room_name = generate_room_name(
+            layout_room.tags if hasattr(layout_room, 'tags') else [],
+            layout_room.number,
+            name_seed + layout_room.number
+        )
+        room.name = room_name
     
     dungeon_map.add_element(room)
     return room
@@ -413,7 +438,7 @@ def _create_passage_with_doors(
                 dungeon_map.add_element(passage)
                 elements.append(passage)
             except ValueError as e:
-                print(f"Warning: Could not create single-point passage: {e}")
+                logger.warning("Could not create single-point passage: %s", e)
         
         if end_room:
             elements.append(end_room)
@@ -497,7 +522,7 @@ def _create_passage_with_doors(
                 elements.append(passage)
                 passages_created.append(passage)
             except ValueError as e:
-                print(f"Warning: Could not create passage: {e}")
+                logger.warning("Could not create passage: %s", e)
     elif len(working_path) == 1:
         # Single-cell passage
         cell = working_path[0]
@@ -512,7 +537,7 @@ def _create_passage_with_doors(
             elements.append(passage)
             passages_created.append(passage)
         except ValueError as e:
-            print(f"Warning: Could not create single-cell passage: {e}")
+            logger.warning("Could not create single-cell passage: %s", e)
     # len(working_path) == 0: No passage needed - doors/exits cover all cells
     
     # Add end door (must come after passage in the chain)
@@ -585,7 +610,12 @@ def _create_door(
     from dungeongen.map.door import Door, DoorType, DoorOrientation
     from dungeongen.map.enums import RoomDirection
     
-    door_type = DoorType.OPEN if layout_door_type in (LayoutDoorType.OPEN, LayoutDoorType.SECRET) else DoorType.CLOSED
+    if layout_door_type == LayoutDoorType.LOCKED:
+        door_type = DoorType.LOCKED
+    elif layout_door_type in (LayoutDoorType.OPEN, LayoutDoorType.SECRET):
+        door_type = DoorType.OPEN
+    else:
+        door_type = DoorType.CLOSED
     
     # Door orientation based on passage direction
     orientation = DoorOrientation.HORIZONTAL if passage_dir in (RoomDirection.EAST, RoomDirection.WEST) else DoorOrientation.VERTICAL
@@ -595,7 +625,7 @@ def _create_door(
         dungeon_map.add_element(door)
         return door
     except Exception as e:
-        print(f"Warning: Could not create door at {point}: {e}")
+        logger.warning("Could not create door at %s: %s", point, e)
         return None
 
 
@@ -670,7 +700,7 @@ def _decorate_room(room: 'Room', seed: int, toward_spine: str) -> None:
     import random
     from dungeongen.constants import CELL_SIZE
     from dungeongen.map.enums import Direction
-    from dungeongen.map.props import ColumnType, Altar, Dias, Fountain
+    from dungeongen.map.props import ColumnType, Altar, Dias, Fountain, Coffin, Star, Podium, Curtains, Barrels
     from dungeongen.map.arrange import ColumnArrangement, arrange_columns, arrange_random_props, PropType
     from dungeongen.map.room import RoomType
     
@@ -773,6 +803,40 @@ def _decorate_room(room: 'Room', seed: int, toward_spine: str) -> None:
     elif altar_roll < 0.07:
         arrange_random_props(room, [PropType.ALTAR], min_count=2, max_count=2)
     
+    # Star decoration in larger rooms
+    if room_area > 12 and rng.random() < 0.10:
+        center_x = room.bounds.left + room.bounds.width / 2
+        center_y = room.bounds.top + room.bounds.height / 2
+        star = Star((center_x - CELL_SIZE / 2, center_y - CELL_SIZE / 2))
+        room.add_prop(star)
+
+    # Podium in medium rooms
+    if room_area > 9 and room_area <= 25 and rng.random() < 0.08:
+        center_x = room.bounds.left + room.bounds.width / 2
+        center_y = room.bounds.top + room.bounds.height / 2
+        podium = Podium((center_x - CELL_SIZE / 2, center_y - CELL_SIZE / 2))
+        room.add_prop(podium)
+
+    # Curtains on walls
+    if room.room_type == RoomType.RECTANGULAR and room_area > 8 and rng.random() < 0.06:
+        curtain_center_x = room.bounds.left + room.bounds.width / 2
+        cw = CELL_SIZE
+        curtain = Curtains((curtain_center_x - cw / 2, room.bounds.top))
+        room.add_prop(curtain)
+
+    # Barrels in utility rooms
+    if rng.random() < 0.08:
+        arrange_random_props(room, [PropType.BARRELS], min_count=1, max_count=2)
+
+    # Coffins in dead-end or larger rooms
+    if room_area > 9 and rng.random() < 0.05:
+        cw = CELL_SIZE
+        cx = room.bounds.left + room.bounds.width / 2 - cw / 2
+        cy = room.bounds.top + room.bounds.height / 2 - cw / 2
+        from dungeongen.map._props.coffin import COFFIN_PROP_TYPE
+        coffin = Coffin(COFFIN_PROP_TYPE, (cx, cy))
+        room.add_prop(coffin)
+
     # Add rocks
     arrange_random_props(room, [PropType.SMALL_ROCK], min_count=0, max_count=5)
     arrange_random_props(room, [PropType.MEDIUM_ROCK], min_count=0, max_count=3)
@@ -794,7 +858,7 @@ def render_dungeon_to_png(layout_dungeon: Dungeon, output_path: str = 'dungeon_o
     
     image = surface.makeImageSnapshot()
     image.save(output_path, skia.kPNG)
-    print(f"Rendered dungeon to {output_path}")
+    logger.info("Rendered dungeon to %s", output_path)
 
 
 if __name__ == "__main__":
@@ -807,5 +871,5 @@ if __name__ == "__main__":
     generator = DungeonGenerator(params)
     dungeon = generator.generate(seed=42)
     
-    print(f"Generated: {len(dungeon.rooms)} rooms, {len(dungeon.passages)} passages")
+    logger.info("Generated: %d rooms, %d passages", len(dungeon.rooms), len(dungeon.passages))
     render_dungeon_to_png(dungeon, 'dungeon_rendered.png')

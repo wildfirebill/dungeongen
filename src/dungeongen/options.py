@@ -79,6 +79,13 @@ class Options:
     door_stroke_width: float = 4.0  # Width of door border strokes (2/3 of border_width)
     map_border_cells: float = 4.0  # Number of cells padding around the map
 
+    # Auto-rotate transform
+    rotation_degrees: float = 0.0  # Clockwise rotation angle for diagonal map views (0 = no rotation)
+
+    # Text / description options
+    show_room_names: bool = False  # Whether to display generated room names on the map
+    show_dungeon_title: bool = False  # Whether to display a dungeon title at the top
+
     @staticmethod
     def get_invalid_options() -> 'Options':
         return _invalid_options

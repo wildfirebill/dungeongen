@@ -7,9 +7,13 @@ from typing import Tuple, Optional
 class DungeonSize(Enum):
     TINY = auto()      # 4-6 rooms
     SMALL = auto()     # 6-10 rooms
-    MEDIUM = auto()    # 10-16 rooms
-    LARGE = auto()     # 16-24 rooms
-    XLARGE = auto()    # 24-40 rooms
+    MEDIUM = auto()    # 10-20 rooms
+    LARGE = auto()     # 20-35 rooms
+    XLARGE = auto()    # 35-50 rooms
+    XXLARGE = auto()   # 50-75 rooms
+    XXXLARGE = auto()  # 75-100 rooms
+    MEGA = auto()      # 100-125 rooms
+    ULTIMATE = auto()  # 125-150 rooms
 
 
 class SymmetryType(Enum):
@@ -35,9 +39,13 @@ class DungeonArchetype(Enum):
 ROOM_COUNTS = {
     DungeonSize.TINY: (4, 6),
     DungeonSize.SMALL: (6, 10),
-    DungeonSize.MEDIUM: (10, 16),
-    DungeonSize.LARGE: (16, 24),
-    DungeonSize.XLARGE: (24, 40),
+    DungeonSize.MEDIUM: (10, 20),
+    DungeonSize.LARGE: (20, 35),
+    DungeonSize.XLARGE: (35, 50),
+    DungeonSize.XXLARGE: (50, 75),
+    DungeonSize.XXXLARGE: (75, 100),
+    DungeonSize.MEGA: (100, 125),
+    DungeonSize.ULTIMATE: (125, 150),
 }
 
 # Base room size pools (width, height) for different biases
