@@ -6,12 +6,14 @@ A procedural dungeon generation and rendering system for tabletop RPG maps.
 
 ## 🎮 Try it Online
 
-**[dungeongen-web.onrender.com](https://dungeongen-web.onrender.com/)** - No installation required!
+*No hosted demo available — run locally instead.*
 
 ## Quick Start
 
 ```bash
-pip install dungeongen
+git clone https://github.com/wildfirebill/dungeongen.git
+cd dungeongen
+pip install -e .
 python -m dungeongen.webview.app
 ```
 Then open http://localhost:5050 in your browser to generate dungeons interactively.
@@ -83,14 +85,9 @@ dungeongen/
 
 ## Installation
 
-### From PyPI
+### From Source
 ```bash
-pip install dungeongen
-```
-
-### From Source (for development)
-```bash
-git clone https://github.com/benjcooley/dungeongen.git
+git clone https://github.com/wildfirebill/dungeongen.git
 cd dungeongen
 pip install -e .
 ```
