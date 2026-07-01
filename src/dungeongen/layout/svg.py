@@ -685,11 +685,14 @@ class SVGRenderer:
         # Larger font for room numbers
         font_size = min(self.grid_size * 0.8, room.width * self.grid_size * 0.4)
         
+        # Safe rooms get a portal emoji before the number
+        prefix = '🌀 ' if 'safe' in room.tags else ''
+        
         return (
             f'<text x="{px}" y="{py + font_size * 0.35}" '
             f'font-size="{font_size}" fill="#ffffff" text-anchor="middle" '
             f'font-family="sans-serif" font-weight="bold" opacity="0.7">'
-            f'{room.number}</text>'
+            f'{prefix}{room.number}</text>'
         )
     
     def _render_items(self, room: Room, offset_x: int, offset_y: int) -> str:

@@ -135,6 +135,22 @@ class Room(MapElement):
                 return int(tag.split(':')[1])
         return 0
 
+    def _draw_portal_icon(self, canvas: skia.Canvas) -> None:
+        """Draw a portal/spiral icon for safe rooms."""
+        cx = self._bounds.x + self._bounds.width / 2
+        cy = self._bounds.y + self._bounds.height / 2
+        radius = min(self._bounds.width, self._bounds.height) * 0.25
+        paint = skia.Paint(
+            AntiAlias=True,
+            Style=skia.Paint.kStroke_Style,
+            StrokeWidth=2.0,
+            Color=skia.ColorSetARGB(200, 100, 200, 255)
+        )
+        # Draw a spiral-like icon (concentric arcs)
+        for i in range(3):
+            r = radius * (0.3 + i * 0.25)
+            canvas.drawCircle(cx, cy, r, paint)
+
     def _draw_items(self, canvas: skia.Canvas) -> None:
         if not self._items and not self.is_boss:
             return
@@ -264,6 +280,8 @@ class Room(MapElement):
                 canvas.drawPath(path, glow_paint)
             self.draw_corners(canvas)
         elif layer == Layers.TEXT:
+            if 'safe' in self._tags:
+                self._draw_portal_icon(canvas)
             self._draw_number(canvas)
             self._draw_items(canvas)
             self._draw_name(canvas)

@@ -150,6 +150,9 @@ class DungeonGenerator:
         
         # Phase 10b: Boss room & key shard placement
         self._apply_boss_and_keys(dungeon)
+
+        # Phase 10c: Tag safe/respawn rooms (every 20th room)
+        self._tag_safe_rooms(dungeon)
         
         # Phase 11: Copy symmetry info to dungeon for prop decoration
         dungeon.mirror_pairs = dict(self._mirror_pairs)
@@ -3144,4 +3147,13 @@ class DungeonGenerator:
                 bounds=region.bounds
             )
             dungeon.water_regions.append(model_region)
+
+    def _tag_safe_rooms(self, dungeon: Dungeon) -> None:
+        """Tag rooms divisible by 20 as safe/respawn rooms (plus room 1)."""
+        for room in dungeon.rooms.values():
+            if 'boss' in room.tags:
+                continue
+            if room.number > 0 and room.number % 20 == 0 or room.number == 1:
+                if 'safe' not in room.tags:
+                    room.tags.append('safe')
 
